@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const { compareStartTimes } = require("./sortTimeSlot");
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -28,7 +29,7 @@ async function run() {
     const reviewCollection = client.db("docHouseDB").collection("reviews");
     const serviceCollection = client.db("docHouseDB").collection("services");
     const appointmentCollection = client
-      .db("docHouseBD")
+      .db("docHouseDB")
       .collection("appointments");
 
     // doctors related api
@@ -46,7 +47,13 @@ async function run() {
     // services related api
     app.get("/services", async (req, res) => {
       const result = await serviceCollection.find({}).toArray();
-      res.send(result);
+
+      const sortedResult = result.map((service) => ({
+        ...service,
+        availableSlot: [...service.availableSlot].sort(compareStartTimes),
+      }));
+
+      res.send(sortedResult);
     });
 
     app.patch("/services", async (req, res) => {
@@ -89,10 +96,14 @@ async function run() {
     });
 
     // user appointments related api
+    app.get("/appointments", async (req, res) => {
+      const result = await appointmentCollection.find().toArray();
+      res.send(result);
+    });
     app.post("/appointments", async (req, res) => {
       const appointment = req.body;
       const result = await appointmentCollection.insertOne(appointment);
-      res.status(200).send(result);
+      res.send(result);
     });
 
     await client.db("admin").command({ ping: 1 });
