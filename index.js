@@ -2,7 +2,7 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const { compareStartTimes } = require("./sortTimeSlot");
+const { compareStartTimes, compareDates } = require("./sortTimeSlot");
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -56,37 +56,89 @@ async function run() {
       res.send(sortedResult);
     });
 
-    app.patch("/services", async (req, res) => {
-      const { _id, bookedSlotTime, bookedDate } = req.body;
+    app.patch("/services/:action", async (req, res) => {
+      const action = req.params.action;
 
-      const service = await serviceCollection.findOne({
-        _id: new ObjectId(_id),
-      });
+      // adds booked date the selected time slot
+      if (action === "addDate") {
+        const { _id, bookedSlotTime, bookedDate } = req.body;
 
-      const selectedSlot = service?.availableSlot.find(
-        (slotObj) => slotObj.slot === bookedSlotTime
-      );
-      selectedSlot.bookedDates = [...selectedSlot.bookedDates, bookedDate];
+        // finding the service
+        const service = await serviceCollection.findOne({
+          _id: new ObjectId(_id),
+        });
 
-      const restAvailableSlots = service?.availableSlot.filter(
-        (slotObj) => slotObj.slot !== bookedSlotTime
-      );
+        // finding selected time slot object from available slot times
+        const selectedSlot = service?.availableSlot.find(
+          (slotObj) => slotObj.slot === bookedSlotTime
+        );
+        // adding the booked date to bookedDates array of the selected time slot object
+        selectedSlot.bookedDates = [...selectedSlot.bookedDates, bookedDate];
 
-      const newAvailableSlots = [...restAvailableSlots, selectedSlot];
+        // filtering rest(un-updated) available time slots
+        const restAvailableSlots = service?.availableSlot.filter(
+          (slotObj) => slotObj.slot !== bookedSlotTime
+        );
 
-      const updatedService = {
-        $set: {
-          availableSlot: newAvailableSlots,
-        },
-      };
+        // creating new available slots with updated and un-updated slots
+        const newAvailableSlots = [...restAvailableSlots, selectedSlot];
 
-      const result = await serviceCollection.updateOne(
-        { _id: new ObjectId(_id) },
-        updatedService,
-        { upsert: true }
-      );
+        // updating the service object
+        const updatedService = {
+          $set: {
+            availableSlot: newAvailableSlots,
+          },
+        };
 
-      res.send(result);
+        const result = await serviceCollection.updateOne(
+          { _id: new ObjectId(_id) },
+          updatedService,
+          { upsert: true }
+        );
+        res.send(result);
+      } else if (action === "deleteDate") {
+        const { serviceName, bookedSlotTime, bookedDate } = req.body;
+
+        // finding the service
+        const service = await serviceCollection.findOne({
+          serviceName: serviceName,
+        });
+
+        // finding selected time slot object from available slot times
+        const selectedSlot = service?.availableSlot.find(
+          (slotObj) => slotObj.slot === bookedSlotTime
+        );
+
+        // updating selected time slot
+        const restBookedDates = selectedSlot.bookedDates.filter(
+          (date) => date !== bookedDate
+        );
+        selectedSlot.bookedDates = [...restBookedDates];
+
+        // filtering rest(un-updated) available time slots
+        const restAvailableSlots = service?.availableSlot.filter(
+          (slotObj) => slotObj.slot !== bookedSlotTime
+        );
+
+        // creating new available slots with updated and un-updated slots
+        const newAvailableSlots = [...restAvailableSlots, selectedSlot];
+
+        // updating the service object
+        const updatedService = {
+          $set: {
+            availableSlot: newAvailableSlots,
+          },
+        };
+
+        const result = await serviceCollection.updateOne(
+          { serviceName: serviceName },
+          updatedService,
+          { upsert: true }
+        );
+        res.send(result);
+
+        // console.log(service, selectedSlot, bookedDate, restBookedDates);
+      }
     });
 
     // reviews related api
@@ -97,12 +149,28 @@ async function run() {
 
     // user appointments related api
     app.get("/appointments", async (req, res) => {
-      const result = await appointmentCollection.find().toArray();
+      const userEmail = req.query.email;
+      const result = await appointmentCollection
+        .find({ email: userEmail })
+        .toArray();
+
+      result.sort(
+        (a, b) => new Date(a.appointmentDate) - new Date(b.appointmentDate)
+      );
+
       res.send(result);
     });
     app.post("/appointments", async (req, res) => {
       const appointment = req.body;
       const result = await appointmentCollection.insertOne(appointment);
+      res.send(result);
+    });
+
+    app.delete("/appointments/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await appointmentCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
       res.send(result);
     });
 

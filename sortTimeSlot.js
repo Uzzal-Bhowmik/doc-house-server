@@ -20,4 +20,10 @@ function compareStartTimes(slotA, slotB) {
   return startTimeA - startTimeB;
 }
 
-module.exports = { compareStartTimes };
+const compareDates = (a, b) => {
+  const dateA = new Date(a.date);
+  const dateB = new Date(b.date);
+  return dateA - dateB;
+};
+
+module.exports = { compareStartTimes, compareDates };
