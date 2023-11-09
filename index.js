@@ -5,11 +5,37 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const { compareStartTimes, compareDates } = require("./sortTimeSlot");
 const app = express();
 const port = process.env.PORT || 5000;
+const jwt = require("jsonwebtoken");
 
 // middleware
 app.use(cors());
 app.use(express.json());
 
+// Verify JWT Token Middleware
+const verifyJWT = (req, res, next) => {
+  const authorization = req.headers.authorization;
+
+  if (!authorization) {
+    return res
+      .status(401)
+      .send({ error: true, message: "unauthorized access" });
+  }
+
+  const token = authorization.split(" ")[1];
+
+  jwt.verify(token, process.env.JWT_SECRET_KEY, (err, decoded) => {
+    if (err) {
+      return res
+        .status(401)
+        .send({ error: true, message: "unauthorized access" });
+    }
+
+    req.decoded = decoded;
+    next();
+  });
+};
+
+// MONGO DB CONNECTION
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.5732rtt.mongodb.net/?retryWrites=true&w=majority`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -28,9 +54,21 @@ async function run() {
     const doctorCollection = client.db("docHouseDB").collection("doctors");
     const reviewCollection = client.db("docHouseDB").collection("reviews");
     const serviceCollection = client.db("docHouseDB").collection("services");
+    const userCollection = client.db("docHouseDB").collection("users");
     const appointmentCollection = client
       .db("docHouseDB")
       .collection("appointments");
+
+    // generate JWT Token related api
+    app.post("/jwt", async (req, res) => {
+      const userEmailObj = req.body;
+
+      const token = jwt.sign(userEmailObj, process.env.JWT_SECRET_KEY, {
+        expiresIn: "2h",
+      });
+
+      res.send({ token });
+    });
 
     // doctors related api
     app.get("/doctors", async (req, res) => {
@@ -147,8 +185,42 @@ async function run() {
       res.send(result);
     });
 
+    // users related api
+
+    // admin route
+    app.get("/users", verifyJWT, async (req, res) => {
+      const result = await userCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+
+      // check if the user already exists
+      const userExists = await userCollection.findOne({ email: user.email });
+      if (userExists) {
+        return res.send({ message: "message already exists" });
+      }
+
+      const insertionResult = await userCollection.insertOne(user);
+      res.send(insertionResult);
+    });
+
+    // api to check if a user is admin
+    app.get("/admin", verifyJWT, async (req, res) => {
+      const email = req.query.email;
+      if (email !== req.decoded?.email) return res.send({ isAdmin: false });
+
+      const user = await userCollection.findOne({ email: email });
+      if (user?.role !== "admin") {
+        return res.send({ isAdmin: false });
+      }
+
+      res.send({ isAdmin: true });
+    });
+
     // user appointments related api
-    app.get("/appointments", async (req, res) => {
+    app.get("/appointments", verifyJWT, async (req, res) => {
       const userEmail = req.query.email;
       const result = await appointmentCollection
         .find({ email: userEmail })
