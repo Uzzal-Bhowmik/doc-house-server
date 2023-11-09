@@ -70,6 +70,17 @@ async function run() {
       res.send({ token });
     });
 
+    // server side admin verification
+    const verifyAdmin = async (req, res, next) => {
+      const email = req?.decoded.email;
+      const user = await userCollection.findOne({ email: email });
+
+      if (user?.role !== "admin") {
+        return res.send({ message: "forbidden access" });
+      }
+      next();
+    };
+
     // doctors related api
     app.get("/doctors", async (req, res) => {
       const result = await doctorCollection.find({}).toArray();
@@ -188,7 +199,7 @@ async function run() {
     // users related api
 
     // admin route
-    app.get("/users", verifyJWT, async (req, res) => {
+    app.get("/users", verifyJWT, verifyAdmin, async (req, res) => {
       const result = await userCollection.find().toArray();
       res.send(result);
     });
