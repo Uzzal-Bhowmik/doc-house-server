@@ -14,7 +14,6 @@ app.use(express.json());
 // Verify JWT Token Middleware
 const verifyJWT = (req, res, next) => {
   const authorization = req.headers.authorization;
-  console.log(req.headers);
 
   if (!authorization) {
     return res
@@ -71,12 +70,10 @@ async function run() {
       res.send({ token });
     });
 
-    // server side admin verification
+    // server side admin verification middleware
     const verifyAdmin = async (req, res, next) => {
       const email = req?.decoded.userEmail;
       const user = await userCollection.findOne({ email: email });
-
-      console.log(email, user);
 
       if (user?.role !== "admin") {
         return res.send({ message: "forbidden access" });
@@ -188,8 +185,6 @@ async function run() {
           { upsert: true }
         );
         res.send(result);
-
-        // console.log(service, selectedSlot, bookedDate, restBookedDates);
       }
     });
 
@@ -223,15 +218,12 @@ async function run() {
     // api to check if a user is admin
     app.get("/users/admin/:email", verifyJWT, async (req, res) => {
       const email = req.params.email;
-      console.log(email, req.decoded.userEmail);
       if (email !== req.decoded?.userEmail) return res.send({ isAdmin: false });
 
       const user = await userCollection.findOne({ email: email });
       if (user?.role !== "admin") {
         return res.send({ isAdmin: false });
       }
-
-      console.log("user", user);
 
       res.send({ isAdmin: true });
     });
