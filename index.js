@@ -58,6 +58,7 @@ async function run() {
     const appointmentCollection = client
       .db("docHouseDB")
       .collection("appointments");
+    const paymentCollection = client.db("docHouseDB").collection("payments");
 
     // generate JWT Token related api
     app.post("/jwt", async (req, res) => {
@@ -190,7 +191,13 @@ async function run() {
 
     // reviews related api
     app.get("/reviews", async (req, res) => {
-      const result = await reviewCollection.find({}).toArray();
+      const email = req.query.email;
+      let result = [];
+      if (!email) {
+        result = await reviewCollection.find({}).toArray();
+      } else {
+        result = await reviewCollection.find({ email: email }).toArray();
+      }
       res.send(result);
     });
 
@@ -241,18 +248,42 @@ async function run() {
 
       res.send(result);
     });
-    app.post("/appointments", async (req, res) => {
+
+    app.post("/appointments", verifyJWT, async (req, res) => {
       const appointment = req.body;
       const result = await appointmentCollection.insertOne(appointment);
       res.send(result);
     });
 
-    app.delete("/appointments/:id", async (req, res) => {
+    app.delete("/appointments/:id", verifyJWT, async (req, res) => {
       const id = req.params.id;
       const result = await appointmentCollection.deleteOne({
         _id: new ObjectId(id),
       });
       res.send(result);
+    });
+
+    // payment related api
+    app.get("/payments", verifyJWT, async (req, res) => {
+      const email = req.query.email;
+      const payments = await paymentCollection.find({ email: email }).toArray();
+      res.send(payments);
+    });
+
+    // USER STATS API
+    app.get("/dashboard/userhome", async (req, res) => {
+      const email = req.query.email;
+      const appointments = await appointmentCollection.count({
+        email: email,
+      });
+      const payments = await paymentCollection.count({
+        email: email,
+      });
+      const reviews = await reviewCollection.count({
+        email: email,
+      });
+
+      res.send({ appointments, payments, reviews });
     });
 
     await client.db("admin").command({ ping: 1 });
