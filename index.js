@@ -6,6 +6,7 @@ const { compareStartTimes, compareDates } = require("./sortTimeSlot");
 const app = express();
 const port = process.env.PORT || 5000;
 const jwt = require("jsonwebtoken");
+const stripe = require("stripe")(process.env.PAYMENT_GATEWAY_SK);
 
 // middleware
 app.use(cors());
@@ -263,11 +264,39 @@ async function run() {
       res.send(result);
     });
 
+    // appointment's payment status patching in appointments
+    app.patch("/appointments/:id", verifyJWT, async (req, res) => {
+      const id = req.params.id;
+      const body = req.body;
+
+      const filter = { _id: new ObjectId(id) };
+      const options = { upsert: true };
+
+      const updatedDoc = {
+        $set: {
+          payment: body.payment,
+        },
+      };
+
+      const result = await appointmentCollection.updateOne(
+        filter,
+        updatedDoc,
+        options
+      );
+
+      res.send(result);
+    });
+
     // payment related api
     app.get("/payments", verifyJWT, async (req, res) => {
       const email = req.query.email;
       const payments = await paymentCollection.find({ email: email }).toArray();
       res.send(payments);
+    });
+
+    app.post("/payments", verifyJWT, async (req, res) => {
+      const result = await paymentCollection.insertOne(req.body);
+      res.send(result);
     });
 
     // USER STATS API
@@ -284,6 +313,23 @@ async function run() {
       });
 
       res.send({ appointments, payments, reviews });
+    });
+
+    // PAYMENT RELATED API
+    app.post("/create-payment-intent", async (req, res) => {
+      const { price } = req.body;
+      const amount = parseInt(parseFloat(price) * 100);
+
+      // Create a PaymentIntent with the order amount and currency
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount,
+        currency: "usd",
+        payment_method_types: ["card"],
+      });
+
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
     });
 
     await client.db("admin").command({ ping: 1 });
