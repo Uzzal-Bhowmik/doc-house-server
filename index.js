@@ -85,13 +85,31 @@ async function run() {
 
     // doctors related api
     app.get("/doctors", async (req, res) => {
-      const result = await doctorCollection.find({}).toArray();
-      res.send(result);
+      const newDoctors = await doctorCollection
+        .find({})
+        .sort({ _id: -1 })
+        .limit(3)
+        .toArray();
+      res.send(newDoctors);
     });
 
     app.get("/doctors/:id", async (req, res) => {
       const id = req.params.id;
       const result = await doctorCollection.findOne({ _id: new ObjectId(id) });
+      res.send(result);
+    });
+
+    app.post("/doctors", async (req, res) => {
+      const doctor = req.body;
+      const result = await doctorCollection.insertOne(doctor);
+      res.send(result);
+    });
+
+    app.delete("/doctors/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await doctorCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
       res.send(result);
     });
 
@@ -223,8 +241,37 @@ async function run() {
         return res.send({ message: "message already exists" });
       }
 
+      // convert createdAt entry from string to Date() object to store in db
+      user.createdAt = new Date(user.createdAt);
+
       const insertionResult = await userCollection.insertOne(user);
       res.send(insertionResult);
+    });
+
+    app.patch("/users/:id", verifyJWT, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      const body = req.body;
+
+      const filter = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          role: body.role,
+        },
+      };
+      const options = { upsert: true };
+
+      const result = await userCollection.updateOne(
+        filter,
+        updatedDoc,
+        options
+      );
+      res.send(result);
+    });
+
+    app.delete("/users/:id", verifyJWT, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      const result = await userCollection.deleteOne({ _id: new ObjectId(id) });
+      res.send(result);
     });
 
     // api to check if a user is admin
