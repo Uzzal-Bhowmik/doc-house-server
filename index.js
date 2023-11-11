@@ -192,13 +192,17 @@ async function run() {
 
     // reviews related api
     app.get("/reviews", async (req, res) => {
-      const email = req.query.email;
-      let result = [];
-      if (!email) {
-        result = await reviewCollection.find({}).toArray();
-      } else {
-        result = await reviewCollection.find({ email: email }).toArray();
-      }
+      const latestReviews = await reviewCollection
+        .find({})
+        .sort({ _id: -1 })
+        .limit(5)
+        .toArray();
+      res.send(latestReviews);
+    });
+
+    app.post("/reviews", verifyJWT, async (req, res) => {
+      const review = req.body;
+      const result = await reviewCollection.insertOne(review);
       res.send(result);
     });
 
