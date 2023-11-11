@@ -336,6 +336,66 @@ async function run() {
       });
     });
 
+    // ADMIN STATS API
+    app.get(
+      "/dashboard/adminhome",
+      verifyJWT,
+      verifyAdmin,
+      async (req, res) => {
+        const doctorCount = await doctorCollection.estimatedDocumentCount();
+        const patientCount = await userCollection.estimatedDocumentCount();
+        const appointmentCount =
+          await appointmentCollection.estimatedDocumentCount();
+
+        const patientCountsByYear = await userCollection
+          .aggregate([
+            {
+              $group: {
+                _id: { $year: "$createdAt" },
+                count: { $sum: 1 },
+              },
+            },
+            {
+              $project: {
+                year: "$_id",
+                count: 1,
+                _id: 0,
+              },
+            },
+          ])
+          .toArray();
+
+        // Count paid payments
+        const paidCount = await appointmentCollection.countDocuments({
+          "payment.status": "paid",
+        });
+
+        // Count unpaid payments
+        const unpaidCount = await appointmentCollection.countDocuments({
+          payment: { $exists: false },
+        });
+
+        const paymentCount = [
+          {
+            status: "Paid Appointments",
+            count: paidCount,
+          },
+          {
+            status: "Pending Appointments",
+            count: unpaidCount,
+          },
+        ];
+
+        res.send({
+          doctorCount,
+          patientCount,
+          appointmentCount,
+          patientCountsByYear,
+          paymentCount,
+        });
+      }
+    );
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
