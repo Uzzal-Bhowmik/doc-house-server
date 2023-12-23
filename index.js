@@ -277,22 +277,28 @@ async function run() {
     // api to check if a user is admin
     app.get("/users/admin/:email", verifyJWT, async (req, res) => {
       const email = req.params.email;
+
       if (email !== req.decoded?.userEmail) return res.send({ isAdmin: false });
 
       const user = await userCollection.findOne({ email: email });
-      if (user?.role !== "admin") {
-        return res.send({ isAdmin: false });
-      }
 
-      res.send({ isAdmin: true });
+      res.send({ isAdmin: user?.role === "admin" ? true : false });
     });
 
     // user appointments related api
     app.get("/appointments", verifyJWT, async (req, res) => {
-      const userEmail = req.query.email;
-      const result = await appointmentCollection
-        .find({ email: userEmail })
-        .toArray();
+      const userEmail = req.query?.email;
+      const user = await userCollection.findOne({ email: userEmail });
+      const isAdmin = user.role === "admin" ? true : false;
+      let result;
+
+      if (!isAdmin) {
+        result = await appointmentCollection
+          .find({ email: userEmail })
+          .toArray();
+      } else {
+        result = await appointmentCollection.find().toArray();
+      }
 
       result.sort(
         (a, b) => new Date(a.appointmentDate) - new Date(b.appointmentDate)
